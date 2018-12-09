@@ -141,10 +141,10 @@ public class Hreport {
         while (mss.find()) {
             this.Out_txt = this.Out_txt.replaceAll("PARA\\{" + regexFilter(mss.group(1)) + "\\}", paras.getOrDefault(mss.group(1), ""));
         }
-        Matcher ms = Pattern.compile("LOOP\\{([^}]+)\\}").matcher(this.In_txt);
+        Matcher ms = Pattern.compile("<loop>([^\\u0000]+)</loop>").matcher(this.In_txt);
         while (ms.find()) {
-            String fnl_txt = LooperText(cr, ms.group(1));
-            this.Out_txt = this.Out_txt.replaceAll("LOOP\\{" + regexFilter(ms.group(1)) + "\\}", fnl_txt);
+            String fnl_txt = LooperText(cr, ms.group(1).trim());
+            this.Out_txt = this.Out_txt.replaceAll("<loop>" + regexFilter(ms.group(1)) + "</loop>", fnl_txt);
         }
         this.Out_txt = javascriptEngin(Out_txt);
     }
