@@ -96,7 +96,12 @@ public class Hreport {
                 while (mss.find()) {
                     String dateString[] = mss.group(1).split("->");
                     String dats = dateString[1];
-                    Date d = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.0").parse(dats);
+                    Date d = null;
+                    try {
+                        d = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.0").parse(dats);
+                    } catch (Exception e) {
+                        d = new SimpleDateFormat("EEE MMM dd kk:mm:ss z yyyy").parse(dats);
+                    }
                     String newdate = new SimpleDateFormat(dateString[0]).format(d);
                     s = s.replaceAll("TIME\\{" + regexFilter(mss.group(1)) + "\\}", newdate);
                 }
