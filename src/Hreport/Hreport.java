@@ -13,10 +13,15 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.script.ScriptEngine;
@@ -44,6 +49,7 @@ public class Hreport {
             this.In_txt = readFile(file);
             this.Out_txt = this.In_txt;
             this.tmpfile = File.createTempFile(file.getName().split("\\.")[0], ".html");
+            this.tmpfile.deleteOnExit();
         } catch (Exception e) {
             throw new HreportException(e);
         }
@@ -140,16 +146,55 @@ public class Hreport {
             return new DataPill(String.class, data[1]);
         }
     }
-    
-    public void compile(HashMap<String, String> paras, List cr) throws HreportException {
-        Matcher mss = Pattern.compile("PARA\\{([^}]+)\\}").matcher(this.In_txt);
+
+    public void compile(HashMap<String, String> paras, Connection cl) throws HreportException {
+        Matcher mss = Pattern.compile("PARA\\{([^}]+)\\}").matcher(this.Out_txt);
         while (mss.find()) {
             this.Out_txt = this.Out_txt.replaceAll("PARA\\{" + regexFilter(mss.group(1)) + "\\}", paras.getOrDefault(mss.group(1), ""));
         }
-        Matcher ms = Pattern.compile("<loop>([^\\u0000]+)</loop>").matcher(this.In_txt);
-        while (ms.find()) {
-            String fnl_txt = LooperText(cr, ms.group(1).trim());
-            this.Out_txt = this.Out_txt.replaceAll("<loop>" + regexFilter(ms.group(1)) + "</loop>", fnl_txt);
+        ResultSet rs = null;
+        Matcher ms = Pattern.compile("<sql>(.+?)</sql>", Pattern.DOTALL).matcher(this.Out_txt);
+        try {
+            if (ms.find()) {
+                rs = cl.createStatement().executeQuery(ms.group(1).trim());
+                this.Out_txt = this.Out_txt.replaceAll("<sql>" + regexFilter(ms.group(1)) + "</sql>", "");
+            } else {
+                throw new HreportException("Query is missing");
+            }
+            this.Out_txt = this.Out_txt.replaceAll("</(.+?)>(.+?)<(.+?)>", "");
+            Matcher lms = Pattern.compile("<loop>(.+?)</loop>", Pattern.DOTALL).matcher(this.Out_txt);
+            while (lms.find()) {
+                String looptxt = "";
+                while (rs.next()) {
+                    String tmp = lms.group(1).trim();
+                    Matcher m = Pattern.compile("\\[\\[([^]]+)\\]\\]").matcher(tmp);
+                    while (m.find()) {
+                        tmp = tmp.replaceAll("\\[\\[" + regexFilter(m.group(1)) + "\\]\\]", rs.getString(m.group(1)));
+                    }
+                    looptxt += tmp;
+                }
+                rs.first();
+                this.Out_txt = this.Out_txt.replaceAll("<loop>" + regexFilter(lms.group(1)) + "</loop>", looptxt.trim());
+            }
+        } catch (SQLException ex) {
+            throw new HreportException(ex);
+        }
+        this.Out_txt = javascriptEngin(Out_txt);
+    }
+
+    public void compile(HashMap<String, String> paras, List... cr) throws HreportException {
+        Matcher mss = Pattern.compile("PARA\\{([^}]+)\\}").matcher(this.Out_txt);
+        while (mss.find()) {
+            this.Out_txt = this.Out_txt.replaceAll("PARA\\{" + regexFilter(mss.group(1)) + "\\}", paras.getOrDefault(mss.group(1), ""));
+        }
+        for (int i = 0; i < cr.length; i++) {
+            List list = cr[i];
+            String li = (i > 0) ? "" + i : "";
+            Matcher ms = Pattern.compile("<loop" + li + ">(.+?)</loop" + li + ">", Pattern.DOTALL).matcher(this.Out_txt);
+            while (ms.find()) {
+                String fnl_txt = LooperText(list, ms.group(1).trim());
+                this.Out_txt = this.Out_txt.replaceAll("<loop" + li + ">" + regexFilter(ms.group(1)) + "</loop" + li + ">", fnl_txt);
+            }
         }
         this.Out_txt = javascriptEngin(Out_txt);
     }
